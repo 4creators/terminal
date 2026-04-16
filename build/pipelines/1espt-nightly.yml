@@ -31,7 +31,7 @@ extends:
     branding: Canary
     buildTerminal: true
     pgoBuildMode: Optimize
-    codeSign: true
+    codeSign: ${{parameters.official}}
     signingIdentity:
       serviceName: $(SigningServiceName)
       appId: $(SigningAppId)
