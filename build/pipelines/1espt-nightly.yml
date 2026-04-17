@@ -49,6 +49,9 @@ extends:
       extraPublishJobs:
         - template: build/pipelines/templates-v2/job-deploy-to-azure-storage.yml@self
           parameters:
+            pool:
+              name: SHINE-INT-S
+              os: windows
             dependsOn: [PublishSymbols]
             storagePublicRootURL: $(AppInstallerRootURL)
             subscription: $(AzureSubscriptionName)

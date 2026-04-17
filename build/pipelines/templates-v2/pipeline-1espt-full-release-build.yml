@@ -160,6 +160,9 @@ extends:
           - ${{ if eq(parameters.buildTerminal, true) }}:
             - template: ./build/pipelines/templates-v2/job-merge-msix-into-bundle.yml@self
               parameters:
+                pool:
+                  name: SHINE-INT-S
+                  os: windows
                 outerTemplateContext:
                   outputs:
                     - output: pipelineArtifact
@@ -177,6 +180,9 @@ extends:
           - ${{ if eq(parameters.buildConPTY, true) }}:
             - template: ./build/pipelines/templates-v2/job-package-conpty.yml@self
               parameters:
+                pool:
+                  name: SHINE-INT-S
+                  os: windows
                 outerTemplateContext:
                   outputs:
                     - output: pipelineArtifact
@@ -192,6 +198,9 @@ extends:
           - ${{ if eq(parameters.buildWPF, true) }}:
             - template: ./build/pipelines/templates-v2/job-build-package-wpf.yml@self
               parameters:
+                pool:
+                  name: SHINE-INT-S
+                  os: windows
                 outerTemplateContext:
                   outputs:
                     - output: pipelineArtifact
@@ -213,6 +222,9 @@ extends:
         jobs:
           - template: ./build/pipelines/templates-v2/job-publish-symbols-using-symbolrequestprod-api.yml@self
             parameters:
+              pool:
+                name: SHINE-INT-S
+                os: windows
               includePublicSymbolServer: ${{ parameters.publishSymbolsToPublic }}
               symbolExpiryTime: ${{ parameters.symbolExpiryTime }}
               subscription: ${{ parameters.symbolPublishingSubscription }}
