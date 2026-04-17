@@ -18,6 +18,7 @@ Author(s):
 
 #include "AppearanceConfig.g.h"
 #include "JsonUtils.h"
+#include "TerminalSettingsSerializationHelpers.h"
 #include "IInheritable.h"
 #include "MTSMSettings.h"
 #include "MediaResourceSupport.h"
@@ -38,6 +39,11 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
 
         void ResolveMediaResources(const Model::MediaResourceResolver& resolver);
 
+        // Generic setting access via SettingKey
+        bool HasSetting(AppearanceSettingKey key) const;
+        void ClearSetting(AppearanceSettingKey key);
+        std::vector<AppearanceSettingKey> CurrentSettings() const;
+
         INHERITABLE_NULLABLE_SETTING(Model::IAppearanceConfig, Microsoft::Terminal::Core::Color, Foreground, nullptr);
         INHERITABLE_NULLABLE_SETTING(Model::IAppearanceConfig, Microsoft::Terminal::Core::Color, Background, nullptr);
         INHERITABLE_NULLABLE_SETTING(Model::IAppearanceConfig, Microsoft::Terminal::Core::Color, SelectionBackground, nullptr);
@@ -48,12 +54,21 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
         INHERITABLE_SETTING(Model::IAppearanceConfig, hstring, LightColorSchemeName, L"Campbell");
 
 #define APPEARANCE_SETTINGS_INITIALIZE(type, name, jsonKey, ...) \
-    INHERITABLE_SETTING(Model::IAppearanceConfig, type, name, ##__VA_ARGS__)
+    INHERITABLE_JSON_SETTING(Model::IAppearanceConfig, type, name, jsonKey, ##__VA_ARGS__)
         MTSM_APPEARANCE_SETTINGS(APPEARANCE_SETTINGS_INITIALIZE)
 #undef APPEARANCE_SETTINGS_INITIALIZE
 
+        // Complex/mutable settings that need backing fields (not JSON-backed)
+        INHERITABLE_SETTING(Model::IAppearanceConfig, IMediaResource, PixelShaderPath, implementation::MediaResource::Empty());
+        INHERITABLE_SETTING(Model::IAppearanceConfig, IMediaResource, PixelShaderImagePath, implementation::MediaResource::Empty());
+        INHERITABLE_SETTING(Model::IAppearanceConfig, IMediaResource, BackgroundImagePath, implementation::MediaResource::Empty());
+
     private:
         winrt::weak_ref<Profile> _sourceProfile;
+
+        // Raw JSON for this layer (appearance-relevant keys only).
+        Json::Value _json{ Json::ValueType::objectValue };
+
         std::set<std::string> _changeLog;
 
         void _logSettingSet(const std::string_view& setting);

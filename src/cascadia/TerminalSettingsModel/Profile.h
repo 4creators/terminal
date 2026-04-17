@@ -49,6 +49,7 @@ Author(s):
 #include "MTSMSettings.h"
 
 #include "JsonUtils.h"
+#include "TerminalSettingsSerializationHelpers.h"
 #include <DefaultSettings.h>
 #include "MediaResourceSupport.h"
 #include "AppearanceConfig.h"
@@ -98,6 +99,11 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
         void LayerJson(const Json::Value& json);
         Json::Value ToJson() const;
 
+        // Generic setting access via SettingKey
+        bool HasSetting(ProfileSettingKey key) const;
+        void ClearSetting(ProfileSettingKey key);
+        std::vector<ProfileSettingKey> CurrentSettings() const;
+
         hstring EvaluatedStartingDirectory() const;
 
         Model::IAppearanceConfig DefaultAppearance();
@@ -137,13 +143,22 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
 
     public:
 #define PROFILE_SETTINGS_INITIALIZE(type, name, jsonKey, ...) \
-    INHERITABLE_SETTING_WITH_LOGGING(Model::Profile, type, name, jsonKey, ##__VA_ARGS__)
+    INHERITABLE_JSON_SETTING_WITH_LOGGING(Model::Profile, type, name, jsonKey, ##__VA_ARGS__)
         MTSM_PROFILE_SETTINGS(PROFILE_SETTINGS_INITIALIZE)
 #undef PROFILE_SETTINGS_INITIALIZE
+
+        // Complex/mutable settings that need backing fields (not JSON-backed)
+        INHERITABLE_SETTING(Model::Profile, IMediaResource, Icon, implementation::MediaResource::FromString(L"\uE756"));
+        INHERITABLE_SETTING(Model::Profile, IEnvironmentVariableMap, EnvironmentVariables, nullptr);
+        INHERITABLE_SETTING(Model::Profile, Windows::Foundation::Collections::IVector<IMediaResource>, BellSound, nullptr);
 
     private:
         Model::IAppearanceConfig _DefaultAppearance{ winrt::make<AppearanceConfig>(weak_ref<Model::Profile>(*this)) };
         Model::FontConfig _FontInfo{ winrt::make<FontConfig>(weak_ref<Model::Profile>(*this)) };
+
+        // Raw JSON for this layer. Populated by LayerJson(), will become the
+        // source of truth for settings once the JSON-backed refactor is complete.
+        Json::Value _json{ Json::ValueType::objectValue };
 
         std::set<std::string> _changeLog;
 

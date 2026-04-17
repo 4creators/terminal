@@ -31,6 +31,11 @@ namespace SettingsModelUnitTests
         TEST_METHOD(TestGenGuidsForProfiles);
         TEST_METHOD(TestCorrectOldDefaultShellPaths);
         TEST_METHOD(ProfileDefaultsProhibitedSettings);
+
+        TEST_METHOD(JsonSyncOnSetAndClear);
+        TEST_METHOD(SettingKeyEnumAndJsonKeyLookup);
+        TEST_METHOD(GenericHasAndClearMatchTypedAPIs);
+        TEST_METHOD(CurrentSettingsReturnsCorrectKeys);
     };
 
     void ProfileTests::ProfileGeneratesGuid()
@@ -531,5 +536,169 @@ namespace SettingsModelUnitTests
         VERIFY_ARE_NOT_EQUAL(Utils::GuidFromString(L"{00000000-0000-0000-0000-000000000000}"), static_cast<GUID>(allProfiles.GetAt(2).Guid()));
         VERIFY_ARE_NOT_EQUAL(L"Default Profile Source", allProfiles.GetAt(2).Source());
         VERIFY_ARE_NOT_EQUAL(L"foo.exe", allProfiles.GetAt(2).Commandline());
+    }
+
+    void ProfileTests::JsonSyncOnSetAndClear()
+    {
+        // Verify that setting a value via the typed setter updates the internal
+        // _json, and clearing it removes the key from _json.
+        static constexpr std::string_view settingsJson{ R"({
+            "profiles": {
+                "list": [
+                    {
+                        "name": "profile0",
+                        "guid": "{6239a42c-0000-49a3-80bd-e8fdd045185c}",
+                        "historySize": 1000
+                    }
+                ]
+            }
+        })" };
+
+        const auto settings = winrt::make_self<implementation::CascadiaSettings>(settingsJson);
+        const auto profile = settings->AllProfiles().GetAt(0);
+        const auto profileImpl = winrt::get_self<implementation::Profile>(profile);
+
+        // Verify initial value
+        VERIFY_ARE_EQUAL(1000, profile.HistorySize());
+        VERIFY_IS_TRUE(profile.HasHistorySize());
+
+        // Modify setting; _json should be updated
+        profile.HistorySize(5000);
+        VERIFY_ARE_EQUAL(5000, profile.HistorySize());
+
+        // Verify ToJson reflects the change
+        const auto json = profileImpl->ToJson();
+        VERIFY_ARE_EQUAL(5000, json["historySize"].asInt());
+
+        // Clear setting; should fall back to default
+        profile.ClearHistorySize();
+        VERIFY_IS_FALSE(profile.HasHistorySize());
+        // Should now inherit or use default (9001 is the DEFAULT_HISTORY_SIZE)
+        VERIFY_ARE_EQUAL(DEFAULT_HISTORY_SIZE, profile.HistorySize());
+
+        // ToJson should no longer have historySize
+        const auto json2 = profileImpl->ToJson();
+        VERIFY_IS_FALSE(json2.isMember("historySize"));
+    }
+
+    void ProfileTests::SettingKeyEnumAndJsonKeyLookup()
+    {
+        // Verify that the SettingKey enums map to correct JSON keys.
+        using namespace implementation;
+
+        // Spot-check a few profile setting keys
+        VERIFY_ARE_EQUAL(std::string_view{ "historySize" }, JsonKeyForSetting(ProfileSettingKey::HistorySize));
+        VERIFY_ARE_EQUAL(std::string_view{ "snapOnInput" }, JsonKeyForSetting(ProfileSettingKey::SnapOnInput));
+        VERIFY_ARE_EQUAL(std::string_view{ "commandline" }, JsonKeyForSetting(ProfileSettingKey::Commandline));
+        VERIFY_ARE_EQUAL(std::string_view{ "tabTitle" }, JsonKeyForSetting(ProfileSettingKey::TabTitle));
+
+        // Special-cased settings
+        VERIFY_ARE_EQUAL(std::string_view{ "name" }, JsonKeyForSetting(ProfileSettingKey::_Name));
+        VERIFY_ARE_EQUAL(std::string_view{ "guid" }, JsonKeyForSetting(ProfileSettingKey::_Guid));
+        VERIFY_ARE_EQUAL(std::string_view{ "hidden" }, JsonKeyForSetting(ProfileSettingKey::_Hidden));
+        VERIFY_ARE_EQUAL(std::string_view{ "padding" }, JsonKeyForSetting(ProfileSettingKey::_Padding));
+        VERIFY_ARE_EQUAL(std::string_view{ "tabColor" }, JsonKeyForSetting(ProfileSettingKey::_TabColor));
+
+        // Global setting keys
+        VERIFY_ARE_EQUAL(std::string_view{ "initialRows" }, JsonKeyForSetting(GlobalSettingKey::InitialRows));
+        VERIFY_ARE_EQUAL(std::string_view{ "alwaysOnTop" }, JsonKeyForSetting(GlobalSettingKey::AlwaysOnTop));
+
+        // Font setting keys
+        VERIFY_ARE_EQUAL(std::string_view{ "face" }, JsonKeyForSetting(FontSettingKey::FontFace));
+        VERIFY_ARE_EQUAL(std::string_view{ "size" }, JsonKeyForSetting(FontSettingKey::FontSize));
+
+        // SETTINGS_SIZE should be a valid (but large) enum value
+        VERIFY_IS_TRUE(static_cast<int>(ProfileSettingKey::SETTINGS_SIZE) > 0);
+        VERIFY_IS_TRUE(static_cast<int>(GlobalSettingKey::SETTINGS_SIZE) > 0);
+        VERIFY_IS_TRUE(static_cast<int>(FontSettingKey::SETTINGS_SIZE) > 0);
+        VERIFY_IS_TRUE(static_cast<int>(AppearanceSettingKey::SETTINGS_SIZE) > 0);
+    }
+
+    void ProfileTests::GenericHasAndClearMatchTypedAPIs()
+    {
+        // Verify that HasSetting(key) and ClearSetting(key) match the
+        // typed HasXxx() and ClearXxx() methods.
+        static constexpr std::string_view settingsJson{ R"({
+            "profiles": {
+                "list": [
+                    {
+                        "name": "profile0",
+                        "guid": "{6239a42c-0000-49a3-80bd-e8fdd045185c}",
+                        "historySize": 1000,
+                        "snapOnInput": false
+                    }
+                ]
+            }
+        })" };
+
+        const auto settings = winrt::make_self<implementation::CascadiaSettings>(settingsJson);
+        const auto profile = settings->AllProfiles().GetAt(0);
+        const auto profileImpl = winrt::get_self<implementation::Profile>(profile);
+
+        // HasSetting should match HasXxx for set values
+        VERIFY_ARE_EQUAL(profile.HasHistorySize(), profileImpl->HasSetting(implementation::ProfileSettingKey::HistorySize));
+        VERIFY_ARE_EQUAL(profile.HasSnapOnInput(), profileImpl->HasSetting(implementation::ProfileSettingKey::SnapOnInput));
+
+        // HasSetting should match HasXxx for unset values
+        VERIFY_ARE_EQUAL(profile.HasTabTitle(), profileImpl->HasSetting(implementation::ProfileSettingKey::TabTitle));
+        VERIFY_IS_FALSE(profileImpl->HasSetting(implementation::ProfileSettingKey::TabTitle));
+
+        // ClearSetting should behave like ClearXxx
+        profileImpl->ClearSetting(implementation::ProfileSettingKey::HistorySize);
+        VERIFY_IS_FALSE(profile.HasHistorySize());
+        VERIFY_IS_FALSE(profileImpl->HasSetting(implementation::ProfileSettingKey::HistorySize));
+    }
+
+    void ProfileTests::CurrentSettingsReturnsCorrectKeys()
+    {
+        // Verify that CurrentSettings() returns the keys that are explicitly
+        // set at the current layer.
+        static constexpr std::string_view settingsJson{ R"({
+            "profiles": {
+                "list": [
+                    {
+                        "name": "profile0",
+                        "guid": "{6239a42c-0000-49a3-80bd-e8fdd045185c}",
+                        "historySize": 1000,
+                        "snapOnInput": false,
+                        "tabTitle": "MyTab"
+                    }
+                ]
+            }
+        })" };
+
+        const auto settings = winrt::make_self<implementation::CascadiaSettings>(settingsJson);
+        const auto profile = settings->AllProfiles().GetAt(0);
+        const auto profileImpl = winrt::get_self<implementation::Profile>(profile);
+
+        const auto currentKeys = profileImpl->CurrentSettings();
+
+        // historySize, snapOnInput, and tabTitle should be in the list
+        auto hasHistorySize = false;
+        auto hasSnapOnInput = false;
+        auto hasTabTitle = false;
+        for (const auto& key : currentKeys)
+        {
+            if (key == implementation::ProfileSettingKey::HistorySize)
+                hasHistorySize = true;
+            if (key == implementation::ProfileSettingKey::SnapOnInput)
+                hasSnapOnInput = true;
+            if (key == implementation::ProfileSettingKey::TabTitle)
+                hasTabTitle = true;
+        }
+        VERIFY_IS_TRUE(hasHistorySize, L"historySize should be in CurrentSettings");
+        VERIFY_IS_TRUE(hasSnapOnInput, L"snapOnInput should be in CurrentSettings");
+        VERIFY_IS_TRUE(hasTabTitle, L"tabTitle should be in CurrentSettings");
+
+        // Clear one and verify it's removed
+        profileImpl->ClearSetting(implementation::ProfileSettingKey::TabTitle);
+        const auto updatedKeys = profileImpl->CurrentSettings();
+        auto hasTabTitleAfterClear = false;
+        for (const auto& key : updatedKeys)
+        {
+            if (key == implementation::ProfileSettingKey::TabTitle)
+                hasTabTitleAfterClear = true;
+        }
+        VERIFY_IS_FALSE(hasTabTitleAfterClear, L"tabTitle should NOT be in CurrentSettings after clear");
     }
 }

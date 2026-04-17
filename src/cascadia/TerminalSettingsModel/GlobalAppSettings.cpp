@@ -64,11 +64,10 @@ winrt::com_ptr<GlobalAppSettings> GlobalAppSettings::Copy() const
     globals->_defaultProfile = _defaultProfile;
     globals->_actionMap = _actionMap->Copy();
     globals->_keybindingsWarnings = _keybindingsWarnings;
+    globals->_json = _json;
 
-#define GLOBAL_SETTINGS_COPY(type, name, jsonKey, ...) \
-    globals->_##name = _##name;
-    MTSM_GLOBAL_SETTINGS(GLOBAL_SETTINGS_COPY)
-#undef GLOBAL_SETTINGS_COPY
+    // MTSM settings are JSON-backed — they live in _json, which is already deep-copied above.
+    // No per-setting copy needed.
 
     if (_colorSchemes)
     {
@@ -86,6 +85,8 @@ winrt::com_ptr<GlobalAppSettings> GlobalAppSettings::Copy() const
             globals->_themes.Insert(kv.Key(), *themeImpl->Copy());
         }
     }
+
+    // Complex/mutable settings with backing fields need explicit deep copy
     if (_NewTabMenu)
     {
         globals->_NewTabMenu = winrt::single_threaded_vector<Model::NewTabMenuEntry>();
@@ -150,26 +151,66 @@ winrt::com_ptr<GlobalAppSettings> GlobalAppSettings::FromJson(const Json::Value&
 
 void GlobalAppSettings::LayerJson(const Json::Value& json, const OriginTag origin)
 {
+    // Merge incoming JSON keys into stored _json (key-wise, not replacement).
+    for (const auto& key : json.getMemberNames())
+    {
+        _json[key] = json[key];
+    }
+
     JsonUtils::GetValueForKey(json, DefaultProfileKey, _UnparsedDefaultProfile);
 
     // GH#8076 - when adding enum values to this key, we also changed it from
     // "useTabSwitcher" to "tabSwitcherMode". Continue supporting
     // "useTabSwitcher", but prefer "tabSwitcherMode"
-    _fixupsAppliedDuringLoad = JsonUtils::GetValueForKey(json, LegacyUseTabSwitcherModeKey, _TabSwitcherMode) || _fixupsAppliedDuringLoad;
+    // Normalize legacy keys into canonical _json keys for JSON-backed getters.
+    {
+        Model::TabSwitcherMode legacyVal{};
+        if (JsonUtils::GetValueForKey(json, LegacyUseTabSwitcherModeKey, legacyVal))
+        {
+            _fixupsAppliedDuringLoad = true;
+            _json["tabSwitcherMode"] = json[JsonKey(LegacyUseTabSwitcherModeKey)];
+        }
+    }
+    {
+        bool legacyVal{};
+        if (JsonUtils::GetValueForKey(json, LegacyInputServiceWarningKey, legacyVal))
+        {
+            _fixupsAppliedDuringLoad = true;
+            _json["warning.inputService"] = json[JsonKey(LegacyInputServiceWarningKey)];
+        }
+        if (JsonUtils::GetValueForKey(json, LegacyWarnAboutLargePasteKey, legacyVal))
+        {
+            _fixupsAppliedDuringLoad = true;
+            _json["warning.largePaste"] = json[JsonKey(LegacyWarnAboutLargePasteKey)];
+        }
+        if (JsonUtils::GetValueForKey(json, LegacyWarnAboutMultiLinePasteKey, legacyVal))
+        {
+            _fixupsAppliedDuringLoad = true;
+            _json["warning.multiLinePaste"] = json[JsonKey(LegacyWarnAboutMultiLinePasteKey)];
+        }
+        if (JsonUtils::GetValueForKey(json, LegacyConfirmCloseAllTabsKey, legacyVal))
+        {
+            _fixupsAppliedDuringLoad = true;
+            _json["warning.confirmCloseAllTabs"] = json[JsonKey(LegacyConfirmCloseAllTabsKey)];
+        }
+    }
 
-    _fixupsAppliedDuringLoad = JsonUtils::GetValueForKey(json, LegacyInputServiceWarningKey, _InputServiceWarning) || _fixupsAppliedDuringLoad;
-    _fixupsAppliedDuringLoad = JsonUtils::GetValueForKey(json, LegacyWarnAboutLargePasteKey, _WarnAboutLargePaste) || _fixupsAppliedDuringLoad;
-    _fixupsAppliedDuringLoad = JsonUtils::GetValueForKey(json, LegacyWarnAboutMultiLinePasteKey, _WarnAboutMultiLinePaste) || _fixupsAppliedDuringLoad;
-    _fixupsAppliedDuringLoad = JsonUtils::GetValueForKey(json, LegacyConfirmCloseAllTabsKey, _ConfirmCloseAllTabs) || _fixupsAppliedDuringLoad;
-
+    // MTSM settings are now JSON-backed (no backing fields).
+    // Values are already in _json from the merge step above.
+    // We only need to log which settings were set in this layer.
 #define GLOBAL_SETTINGS_LAYER_JSON(type, name, jsonKey, ...) \
-    JsonUtils::GetValueForKey(json, jsonKey, _##name);       \
-    _logSettingIfSet(jsonKey, _##name.has_value());
+    _logSettingIfSet(jsonKey, json.isMember(jsonKey) && !json[jsonKey].isNull());
 
     MTSM_GLOBAL_SETTINGS(GLOBAL_SETTINGS_LAYER_JSON)
 #undef GLOBAL_SETTINGS_LAYER_JSON
 
-    // GH#11975 We only want to allow sensible values and prevent crashes, so we are clamping those values
+    // Complex/mutable settings that have backing fields (not JSON-backed)
+    JsonUtils::GetValueForKey(json, "disabledProfileSources", _DisabledProfileSources);
+    _logSettingIfSet("disabledProfileSources", _DisabledProfileSources.has_value());
+    JsonUtils::GetValueForKey(json, "newTabMenu", _NewTabMenu);
+    _logSettingIfSet("newTabMenu", _NewTabMenu.has_value());
+
+    // GH#11975We only want to allow sensible values and prevent crashes, so we are clamping those values
     // We only want to assign if the value did change through clamping,
     // otherwise we could end up setting defaults that get persisted
     if (this->HasInitialCols())
@@ -304,45 +345,111 @@ Json::Value GlobalAppSettings::ToJson()
     // These experimental options should be removed from the settings file if they're at their default value.
     // This prevents them from sticking around forever, even if the user was just experimenting with them.
     // One could consider this a workaround for the settings UI right now not having a "reset to default" button for these.
-    if (_GraphicsAPI == Control::GraphicsAPI::Automatic)
+    if (HasGraphicsAPI() && GraphicsAPI() == Control::GraphicsAPI::Automatic)
     {
-        _GraphicsAPI.reset();
+        ClearGraphicsAPI();
     }
-    if (_TextMeasurement == Control::TextMeasurement::Graphemes)
+    if (HasTextMeasurement() && TextMeasurement() == Control::TextMeasurement::Graphemes)
     {
-        _TextMeasurement.reset();
+        ClearTextMeasurement();
     }
-    if (_AmbiguousWidth == Control::AmbiguousWidth::Narrow)
+    if (HasAmbiguousWidth() && AmbiguousWidth() == Control::AmbiguousWidth::Narrow)
     {
-        _AmbiguousWidth.reset();
+        ClearAmbiguousWidth();
     }
-    if (_DefaultInputScope == Control::DefaultInputScope::Default)
+    if (HasDefaultInputScope() && DefaultInputScope() == Control::DefaultInputScope::Default)
     {
-        _DefaultInputScope.reset();
+        ClearDefaultInputScope();
     }
 
-    if (_DisablePartialInvalidation == false)
+    if (HasDisablePartialInvalidation() && DisablePartialInvalidation() == false)
     {
-        _DisablePartialInvalidation.reset();
+        ClearDisablePartialInvalidation();
     }
-    if (_SoftwareRendering == false)
+    if (HasSoftwareRendering() && SoftwareRendering() == false)
     {
-        _SoftwareRendering.reset();
+        ClearSoftwareRendering();
     }
 
     Json::Value json{ Json::ValueType::objectValue };
 
     JsonUtils::SetValueForKey(json, DefaultProfileKey, _UnparsedDefaultProfile);
 
-#define GLOBAL_SETTINGS_TO_JSON(type, name, jsonKey, ...) \
-    JsonUtils::SetValueForKey(json, jsonKey, _##name);
+    // MTSM global settings: copy from _json (the source of truth)
+#define GLOBAL_SETTINGS_TO_JSON(type, name, jsonKey, ...)          \
+    if (_json.isMember(jsonKey) && !_json[jsonKey].isNull())        \
+    {                                                               \
+        json[JsonKey(jsonKey)] = _json[JsonKey(jsonKey)];           \
+    }
     MTSM_GLOBAL_SETTINGS(GLOBAL_SETTINGS_TO_JSON)
 #undef GLOBAL_SETTINGS_TO_JSON
+
+    // Complex/mutable settings with backing fields
+    JsonUtils::SetValueForKey(json, "disabledProfileSources", _DisabledProfileSources);
+    JsonUtils::SetValueForKey(json, "newTabMenu", _NewTabMenu);
 
     json[JsonKey(ActionsKey)] = _actionMap->ToJson();
     json[JsonKey(KeybindingsKey)] = _actionMap->KeyBindingsToJson();
 
     return json;
+}
+
+bool GlobalAppSettings::HasSetting(GlobalSettingKey key) const
+{
+    switch (key)
+    {
+#define _GLOBAL_HAS_SETTING(type, name, jsonKey, ...) \
+    case GlobalSettingKey::name:                       \
+        return Has##name();
+        MTSM_GLOBAL_SETTINGS(_GLOBAL_HAS_SETTING)
+#undef _GLOBAL_HAS_SETTING
+    case GlobalSettingKey::_UnparsedDefaultProfile:
+        return HasUnparsedDefaultProfile();
+    case GlobalSettingKey::_DisabledProfileSources:
+        return HasDisabledProfileSources();
+    case GlobalSettingKey::_NewTabMenu:
+        return HasNewTabMenu();
+    default:
+        return false;
+    }
+}
+
+void GlobalAppSettings::ClearSetting(GlobalSettingKey key)
+{
+    switch (key)
+    {
+#define _GLOBAL_CLEAR_SETTING(type, name, jsonKey, ...) \
+    case GlobalSettingKey::name:                         \
+        Clear##name();                                  \
+        break;
+        MTSM_GLOBAL_SETTINGS(_GLOBAL_CLEAR_SETTING)
+#undef _GLOBAL_CLEAR_SETTING
+    case GlobalSettingKey::_UnparsedDefaultProfile:
+        ClearUnparsedDefaultProfile();
+        break;
+    case GlobalSettingKey::_DisabledProfileSources:
+        ClearDisabledProfileSources();
+        break;
+    case GlobalSettingKey::_NewTabMenu:
+        ClearNewTabMenu();
+        break;
+    default:
+        break;
+    }
+}
+
+std::vector<GlobalSettingKey> GlobalAppSettings::CurrentSettings() const
+{
+    std::vector<GlobalSettingKey> result;
+    for (auto i = 0; i < static_cast<int>(GlobalSettingKey::SETTINGS_SIZE); i++)
+    {
+        const auto key = static_cast<GlobalSettingKey>(i);
+        if (HasSetting(key))
+        {
+            result.push_back(key);
+        }
+    }
+    return result;
 }
 
 bool GlobalAppSettings::FixupsAppliedDuringLoad()
@@ -394,9 +501,9 @@ bool GlobalAppSettings::ShouldUsePersistedLayout() const
 void GlobalAppSettings::ResolveMediaResources(const Model::MediaResourceResolver& resolver)
 {
     _actionMap->ResolveMediaResourcesWithBasePath(SourceBasePath, resolver);
-    if (_NewTabMenu)
+    if (HasNewTabMenu())
     {
-        for (const auto& entry : *_NewTabMenu)
+        for (const auto& entry : NewTabMenu())
         {
             if (const auto resolvable{ entry.try_as<IPathlessMediaResourceContainer>() })
             {
@@ -414,11 +521,12 @@ void GlobalAppSettings::_logSettingSet(const std::string_view& setting)
 {
     if (setting == "theme")
     {
-        if (_Theme.has_value())
+        if (HasTheme())
         {
+            const auto theme = Theme();
             // ThemePair always has a Dark/Light value,
             // so we need to check if they were explicitly set
-            if (_Theme->DarkName() == _Theme->LightName())
+            if (theme.DarkName() == theme.LightName())
             {
                 _changeLog.emplace(setting);
             }
@@ -431,9 +539,9 @@ void GlobalAppSettings::_logSettingSet(const std::string_view& setting)
     }
     else if (setting == "newTabMenu")
     {
-        if (_NewTabMenu.has_value())
+        if (HasNewTabMenu())
         {
-            for (const auto& entry : *_NewTabMenu)
+            for (const auto& entry : NewTabMenu())
             {
                 std::string entryType;
                 switch (entry.Type())
@@ -476,7 +584,7 @@ void GlobalAppSettings::UpdateCommandID(const Model::Command& cmd, winrt::hstrin
     _actionMap->UpdateCommandID(cmd, newID);
     // newID might have been empty when this function was called, if so actionMap would have generated a new ID, use that
     newID = cmd.ID();
-    if (_NewTabMenu)
+    if (HasNewTabMenu())
     {
         // Recursive lambda function to look through all the new tab menu entries and update IDs accordingly
         std::function<void(const Model::NewTabMenuEntry&)> recursiveEntryIdUpdate;
@@ -503,7 +611,7 @@ void GlobalAppSettings::UpdateCommandID(const Model::Command& cmd, winrt::hstrin
             }
         };
 
-        for (const auto& entry : *_NewTabMenu)
+        for (const auto& entry : NewTabMenu())
         {
             recursiveEntryIdUpdate(entry);
         }
@@ -515,8 +623,8 @@ void GlobalAppSettings::_logSettingIfSet(const std::string_view& setting, const 
     if (isSet)
     {
         // Exclude some false positives from userDefaults.json
-        const bool settingCopyFormattingToDefault = til::equals_insensitive_ascii(setting, "copyFormatting") && _CopyFormatting.has_value() && _CopyFormatting.value() == static_cast<Control::CopyFormat>(0);
-        const bool settingNTMToDefault = til::equals_insensitive_ascii(setting, "newTabMenu") && _NewTabMenu.has_value() && _NewTabMenu->Size() == 1 && _NewTabMenu->GetAt(0).Type() == NewTabMenuEntryType::RemainingProfiles;
+        const bool settingCopyFormattingToDefault = til::equals_insensitive_ascii(setting, "copyFormatting") && HasCopyFormatting() && CopyFormatting() == static_cast<Control::CopyFormat>(0);
+        const bool settingNTMToDefault = til::equals_insensitive_ascii(setting, "newTabMenu") && HasNewTabMenu() && NewTabMenu().Size() == 1 && NewTabMenu().GetAt(0).Type() == NewTabMenuEntryType::RemainingProfiles;
         if (!settingCopyFormattingToDefault && !settingNTMToDefault)
         {
             _logSettingSet(setting);
