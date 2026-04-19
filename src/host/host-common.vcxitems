@@ -43,6 +43,7 @@
     <ClCompile Include="..\utils.cpp" />
     <ClCompile Include="..\VtInputThread.cpp" />
     <ClCompile Include="..\VtIo.cpp" />
+    <ClCompile Include="..\DriverHook.cpp" />
     <ClCompile Include="..\writeData.cpp" />
     <ClCompile Include="..\_output.cpp" />
     <ClCompile Include="..\_stream.cpp" />
@@ -91,6 +92,7 @@
     <ClInclude Include="..\utils.hpp" />
     <ClInclude Include="..\VtInputThread.hpp" />
     <ClInclude Include="..\VtIo.hpp" />
+    <ClInclude Include="..\DriverHook.hpp" />
     <ClInclude Include="..\writeData.hpp" />
     <ClInclude Include="..\_output.h" />
     <ClInclude Include="..\_stream.h" />

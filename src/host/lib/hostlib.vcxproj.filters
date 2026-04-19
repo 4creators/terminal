@@ -272,6 +272,9 @@
     <ClInclude Include="..\VtIo.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\DriverHook.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\ConsoleArguments.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
