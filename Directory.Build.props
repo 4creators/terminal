@@ -62,4 +62,9 @@
     <Import Project="$(MSBuildCachePackageRoot)\build\$(MSBuildCachePackageName).props" />
     <Import Project="$(MSBuildCacheSharedCompilationPackageRoot)\build\Microsoft.MSBuildCache.SharedCompilation.props" />
   </ImportGroup>
+  <PropertyGroup>
+    <ConDrvDirName Condition="'$(ConDrvDirName)' == ''">con-drv</ConDrvDirName>
+    <ConDrvArtifactDir>$(MSBuildThisFileDirectory)..\$(ConDrvDirName)\artifacts\$(Configuration)\$(Platform)\</ConDrvArtifactDir>
+  </PropertyGroup>
+
 </Project>

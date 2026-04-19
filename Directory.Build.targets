@@ -8,4 +8,10 @@
     <Import Project="$(MSBuildCachePackageRoot)\build\$(MSBuildCachePackageName).targets" />
     <Import Project="$(MSBuildCacheSharedCompilationPackageRoot)\build\Microsoft.MSBuildCache.SharedCompilation.targets" />
   </ImportGroup>
+  <Target Name="CopyArtifactsToConDrv" AfterTargets="Build" Condition="'$(TargetExt)' == '.exe' Or '$(TargetExt)' == '.dll'">
+    <MakeDir Directories="$(ConDrvArtifactDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ConDrvArtifactDir)" Condition="Exists('$(TargetPath)')" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(ConDrvArtifactDir)" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+  </Target>
+
 </Project>
