@@ -47,6 +47,7 @@ public:
     std::wstring GetOriginalCommandLine() const;
     std::wstring GetClientCommandline() const;
     const std::wstring& GetTextMeasurement() const;
+    const std::wstring& GetDriverPipeName() const noexcept { return _driverPipeName; }
     bool GetAmbiguousIsWide() const;
     bool GetForceV1() const;
     bool GetForceNoHandoff() const;
@@ -61,6 +62,7 @@ public:
 
     static const std::wstring_view VT_MODE_ARG;
     static const std::wstring_view HEADLESS_ARG;
+    static const std::wstring_view DRIVER_PIPE_ARG;
     static const std::wstring_view SERVER_HANDLE_ARG;
     static const std::wstring_view SIGNAL_HANDLE_ARG;
     static const std::wstring_view HANDLE_PREFIX;
@@ -91,9 +93,11 @@ private:
                      const DWORD serverHandle,
                      const DWORD signalHandle,
                      const bool inheritCursor,
-                     const bool runAsComServer) :
+                     const bool runAsComServer,
+                     const std::wstring driverPipeName = L"") :
         _commandline(commandline),
         _clientCommandline(clientCommandline),
+        _driverPipeName(driverPipeName),
         _vtInHandle(vtInHandle),
         _vtOutHandle(vtOutHandle),
         _width(width),
@@ -113,6 +117,8 @@ private:
     std::wstring _commandline;
 
     std::wstring _clientCommandline;
+
+    std::wstring _driverPipeName;
 
     HANDLE _vtInHandle;
 
@@ -211,6 +217,7 @@ namespace WEX
             static bool AreEqual(const ConsoleArguments& expected, const ConsoleArguments& actual)
             {
                 return expected.GetClientCommandline() == actual.GetClientCommandline() &&
+                       expected.GetDriverPipeName() == actual.GetDriverPipeName() &&
                        expected.HasVtHandles() == actual.HasVtHandles() &&
                        expected.GetVtInHandle() == actual.GetVtInHandle() &&
                        expected.GetVtOutHandle() == actual.GetVtOutHandle() &&

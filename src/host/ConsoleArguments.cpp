@@ -8,6 +8,7 @@
 using namespace Microsoft::Console::Utils;
 
 const std::wstring_view ConsoleArguments::HEADLESS_ARG = L"--headless";
+const std::wstring_view ConsoleArguments::DRIVER_PIPE_ARG = L"--driver-pipe";
 const std::wstring_view ConsoleArguments::SERVER_HANDLE_ARG = L"--server";
 const std::wstring_view ConsoleArguments::SIGNAL_HANDLE_ARG = L"--signal";
 const std::wstring_view ConsoleArguments::HANDLE_PREFIX = L"0x";
@@ -490,6 +491,10 @@ void ConsoleArguments::s_ConsumeArg(_Inout_ std::vector<std::wstring>& args, _In
             _headless = true;
             s_ConsumeArg(args, i);
             hr = S_OK;
+        }
+        else if (arg == DRIVER_PIPE_ARG)
+        {
+            hr = s_GetArgumentValue(args, i, &_driverPipeName);
         }
         else if (arg == INHERIT_CURSOR_ARG)
         {

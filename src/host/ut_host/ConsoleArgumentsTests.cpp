@@ -30,6 +30,7 @@ public:
     TEST_METHOD(InitialSizeTests);
 
     TEST_METHOD(HeadlessArgTests);
+    TEST_METHOD(DriverPipeArgTests);
     TEST_METHOD(SignalHandleTests);
     TEST_METHOD(FeatureArgTests);
 };
@@ -961,6 +962,33 @@ void ConsoleArgumentsTests::HeadlessArgTests()
                                     0, // signalHandle
                                     false, // inheritCursor
                                     false), // runAsComServer
+                   true); // successful parse?
+}
+
+void ConsoleArgumentsTests::DriverPipeArgTests()
+{
+    std::wstring commandline;
+
+    commandline = L"conhost.exe --driver-pipe my_pipe";
+    ArgTestsRunner(L"#1 Check that the driver-pipe arg works",
+                   commandline,
+                   INVALID_HANDLE_VALUE,
+                   INVALID_HANDLE_VALUE,
+                   ConsoleArguments(commandline,
+                                    L"", // clientCommandLine
+                                    INVALID_HANDLE_VALUE,
+                                    INVALID_HANDLE_VALUE,
+                                    0, // width
+                                    0, // height
+                                    false, // forceV1
+                                    false, // forceNoHandoff
+                                    false, // headless
+                                    true, // createServerHandle
+                                    0, // serverHandle
+                                    0, // signalHandle
+                                    false, // inheritCursor
+                                    false, // runAsComServer
+                                    L"my_pipe"), // driverPipeName
                    true); // successful parse?
 }
 
