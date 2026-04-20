@@ -132,6 +132,9 @@
     <ClCompile Include="..\VtIo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\DriverHook.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\ConsoleArguments.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

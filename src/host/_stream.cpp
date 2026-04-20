@@ -187,9 +187,11 @@ static bool _writeCharsLegacyUnprocessed(SCREEN_INFORMATION& screenInfo, const s
 // Similarly, `psScrollY` is also used by it to track whether the underlying buffer circled. It requires this information to know where the input line moved to.
 void WriteCharsLegacy(SCREEN_INFORMATION& screenInfo, const std::wstring_view& text, til::CoordType* psScrollY)
 {
+    auto& textBuffer = screenInfo.GetTextBuffer();
+    textBuffer.TriggerNewTextNotification(text);
+
     static constexpr wchar_t tabSpaces[8]{ L' ', L' ', L' ', L' ', L' ', L' ', L' ', L' ' };
 
-    auto& textBuffer = screenInfo.GetTextBuffer();
     const auto width = textBuffer.GetSize().Width();
     auto& cursor = textBuffer.GetCursor();
     const auto cursorPosBefore = cursor.GetPosition();
@@ -457,7 +459,12 @@ void WriteClearScreen(SCREEN_INFORMATION& screenInfo)
 [[nodiscard]] HRESULT DoWriteConsole(SCREEN_INFORMATION& screenInfo, std::wstring_view str)
 try
 {
-    if (WI_IsAnyFlagClear(screenInfo.OutputMode, ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT))
+    const bool isVt = WI_IsAnyFlagSet(screenInfo.OutputMode, ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT);
+    
+    // ConDriver Telemetry Hook: Safely stream raw incoming text out via the pipe.
+    Microsoft::Console::Interactivity::ServiceLocator::LocateGlobals().driverHook.WriteStream(str, isVt);
+
+    if (!isVt)
     {
         WriteCharsLegacy(screenInfo, str, nullptr);
     }

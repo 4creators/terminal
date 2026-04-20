@@ -6,6 +6,9 @@
 
 #include "../types/inc/convert.hpp"
 
+#include <TraceLoggingProvider.h>
+TRACELOGGING_DECLARE_PROVIDER(g_hConhostV2EventTraceProvider);
+
 // Routine Description:
 // - Initializes the connection to the programmatic ConDriver telemetry pipe.
 // Arguments:
@@ -17,6 +20,13 @@ void DriverHook::Initialize(const std::wstring& pipeName)
     {
         return;
     }
+
+    TraceLoggingWrite(
+        g_hConhostV2EventTraceProvider,
+        "DriverHook_Initialize",
+        TraceLoggingWideString(pipeName.c_str(), "PipeName"),
+        TraceLoggingLevel(WINEVENT_LEVEL_VERBOSE),
+        TraceLoggingKeyword(TIL_KEYWORD_TRACE));
 
     // Connect to the named pipe created by the Rust orchestrator
     // We open it with GENERIC_WRITE access since we only stream telemetry out
@@ -37,7 +47,8 @@ void DriverHook::Initialize(const std::wstring& pipeName)
 // - Writes the unencoded plain text to the telemetry pipe.
 // Arguments:
 // - text - A chunk of plain text extracted from the TextBuffer.
-void DriverHook::WriteStream(const std::wstring_view text)
+// - isVt - Whether the text is being written via the modern VT engine (true) or Legacy API (false).
+void DriverHook::WriteStream(const std::wstring_view text, const bool isVt)
 {
     if (!_hPipe)
     {
@@ -60,6 +71,15 @@ void DriverHook::WriteStream(const std::wstring_view text)
         return;
     }
 
+    if (_transmissions == 0)
+    {
+        TraceLoggingWrite(
+            g_hConhostV2EventTraceProvider,
+            "DriverHook_FirstTransmission",
+            TraceLoggingLevel(WINEVENT_LEVEL_VERBOSE),
+            TraceLoggingKeyword(TIL_KEYWORD_TRACE));
+    }
+
     DWORD written = 0;
     const auto result = WriteFile(
         _hPipe.get(),
@@ -68,7 +88,37 @@ void DriverHook::WriteStream(const std::wstring_view text)
         &written,
         nullptr);
 
-    if (!result)
+    if (result)
+    {
+        _transmissions++;
+        _bytesTransmitted += written;
+
+        if (isVt)
+        {
+            TraceLoggingWrite(
+                g_hConhostV2EventTraceProvider,
+                "DriverHook_WriteStream_VT",
+                TraceLoggingUInt64(_transmissions, "Transmissions"),
+                TraceLoggingUInt64(_bytesTransmitted, "BytesTransmitted"),
+                TraceLoggingUInt32(written, "BytesWritten"),
+                TraceLoggingString(utf8Text.c_str(), "Payload"),
+                TraceLoggingLevel(WINEVENT_LEVEL_VERBOSE),
+                TraceLoggingKeyword(TIL_KEYWORD_TRACE));
+        }
+        else
+        {
+            TraceLoggingWrite(
+                g_hConhostV2EventTraceProvider,
+                "DriverHook_WriteStream_Legacy",
+                TraceLoggingUInt64(_transmissions, "Transmissions"),
+                TraceLoggingUInt64(_bytesTransmitted, "BytesTransmitted"),
+                TraceLoggingUInt32(written, "BytesWritten"),
+                TraceLoggingString(utf8Text.c_str(), "Payload"),
+                TraceLoggingLevel(WINEVENT_LEVEL_VERBOSE),
+                TraceLoggingKeyword(TIL_KEYWORD_TRACE));
+        }
+    }
+    else
     {
         const auto lastError = GetLastError();
         // ERROR_BROKEN_PIPE means the ConDriver orchestrator closed its end or exited.

@@ -276,6 +276,11 @@ int CALLBACK wWinMain(
     auto hr = args.ParseCommandline();
     if (SUCCEEDED(hr))
     {
+        if (!args.GetDriverPipeName().empty())
+        {
+            Microsoft::Console::Interactivity::ServiceLocator::LocateGlobals().driverHook.Initialize(args.GetDriverPipeName());
+        }
+
         // Only try to register as a handoff target if we are NOT a part of Windows.
 #if TIL_FEATURE_RECEIVEINCOMINGHANDOFF_ENABLED
         if (args.ShouldRunAsComServer())

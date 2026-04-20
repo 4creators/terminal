@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "precomp.h"
+#include <string>
+#include <string_view>
 #include <wil/resource.h>
 
 class DriverHook
@@ -19,8 +20,13 @@ public:
     DriverHook& operator=(DriverHook&&) = delete;
 
     void Initialize(const std::wstring& pipeName);
-    void WriteStream(const std::wstring_view text);
+    void WriteStream(const std::wstring_view text, const bool isVt);
+
+    uint64_t GetTransmissionsCount() const noexcept { return _transmissions; }
+    uint64_t GetBytesTransmitted() const noexcept { return _bytesTransmitted; }
 
 private:
     wil::unique_hfile _hPipe;
+    uint64_t _transmissions{ 0 };
+    uint64_t _bytesTransmitted{ 0 };
 };

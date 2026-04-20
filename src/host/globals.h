@@ -27,6 +27,7 @@ Revision History:
 #include "../renderer/base/Renderer.hpp"
 #include "../server/DeviceComm.h"
 #include "../tsf/Handle.h"
+#include "DriverHook.hpp"
 
 #include <TraceLoggingProvider.h>
 TRACELOGGING_DECLARE_PROVIDER(g_hConhostV2EventTraceProvider);
@@ -42,6 +43,7 @@ public:
     UINT uiDialogBoxCount;
 
     ConsoleArguments launchArgs;
+    DriverHook driverHook;
 
     CONSOLE_INFORMATION& getConsoleInformation();
 
