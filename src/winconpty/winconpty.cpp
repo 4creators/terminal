@@ -121,6 +121,7 @@ HRESULT _CreatePseudoConsole(HANDLE hToken,
                              const HANDLE hInput,
                              const HANDLE hOutput,
                              const DWORD dwFlags,
+                             LPCWSTR driverPipeName,
                              _Inout_ PseudoConsole* pPty)
 {
     if (pPty == nullptr)
@@ -191,17 +192,35 @@ HRESULT _CreatePseudoConsole(HANDLE hToken,
     // GH4061: Ensure that the path to executable in the format is escaped so C:\Program.exe cannot collide with C:\Program Files
     // This is plenty of space to hold the formatted string
     wil::unique_process_heap_string cmd;
-    RETURN_IF_FAILED(wil::str_printf_nothrow(
-        cmd,
-        L"\"%s\" --headless %s%s%s--width %hd --height %hd --signal 0x%tx --server 0x%tx",
-        conhostPath,
-        inheritCursor,
-        ambiguousIsWide,
-        textMeasurement,
-        size.X,
-        size.Y,
-        std::bit_cast<uintptr_t>(signalPipeConhostSide.get()),
-        std::bit_cast<uintptr_t>(serverHandle.get())));
+    if (driverPipeName != nullptr)
+    {
+        RETURN_IF_FAILED(wil::str_printf_nothrow(
+            cmd,
+            L"\"%s\" --headless %s%s%s--width %hd --height %hd --signal 0x%tx --server 0x%tx --driver-pipe %s",
+            conhostPath,
+            inheritCursor,
+            ambiguousIsWide,
+            textMeasurement,
+            size.X,
+            size.Y,
+            std::bit_cast<uintptr_t>(signalPipeConhostSide.get()),
+            std::bit_cast<uintptr_t>(serverHandle.get()),
+            driverPipeName));
+    }
+    else
+    {
+        RETURN_IF_FAILED(wil::str_printf_nothrow(
+            cmd,
+            L"\"%s\" --headless %s%s%s--width %hd --height %hd --signal 0x%tx --server 0x%tx",
+            conhostPath,
+            inheritCursor,
+            ambiguousIsWide,
+            textMeasurement,
+            size.X,
+            size.Y,
+            std::bit_cast<uintptr_t>(signalPipeConhostSide.get()),
+            std::bit_cast<uintptr_t>(serverHandle.get())));
+    }
 
     STARTUPINFOEXW siEx{ 0 };
     siEx.StartupInfo.cb = sizeof(STARTUPINFOEXW);
@@ -468,6 +487,42 @@ extern "C" HRESULT WINAPI ConptyCreatePseudoConsole(_In_ COORD size,
     return ConptyCreatePseudoConsoleAsUser(INVALID_HANDLE_VALUE, size, hInput, hOutput, dwFlags, phPC);
 }
 
+extern "C" HRESULT WINAPI ConptyCreatePseudoConsoleEx(_In_ COORD size,
+                                                      _In_ HANDLE hInput,
+                                                      _In_ HANDLE hOutput,
+                                                      _In_ DWORD dwFlags,
+                                                      _In_opt_ LPCWSTR driverPipeName,
+                                                      _Out_ HPCON* phPC)
+{
+    if (phPC == nullptr)
+    {
+        return E_INVALIDARG;
+    }
+    *phPC = nullptr;
+    if ((!_HandleIsValid(hInput)) && (!_HandleIsValid(hOutput)))
+    {
+        return E_INVALIDARG;
+    }
+
+    auto pPty = (PseudoConsole*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(PseudoConsole));
+    RETURN_IF_NULL_ALLOC(pPty);
+    auto cleanupPty = wil::scope_exit([&]() noexcept {
+        _ClosePseudoConsole(pPty);
+    });
+
+    wil::unique_handle duplicatedInput;
+    wil::unique_handle duplicatedOutput;
+    RETURN_IF_WIN32_BOOL_FALSE(DuplicateHandle(GetCurrentProcess(), hInput, GetCurrentProcess(), duplicatedInput.addressof(), 0, TRUE, DUPLICATE_SAME_ACCESS));
+    RETURN_IF_WIN32_BOOL_FALSE(DuplicateHandle(GetCurrentProcess(), hOutput, GetCurrentProcess(), duplicatedOutput.addressof(), 0, TRUE, DUPLICATE_SAME_ACCESS));
+
+    RETURN_IF_FAILED(_CreatePseudoConsole(INVALID_HANDLE_VALUE, size, duplicatedInput.get(), duplicatedOutput.get(), dwFlags, driverPipeName, pPty));
+
+    *phPC = (HPCON)pPty;
+    cleanupPty.release();
+
+    return S_OK;
+}
+
 extern "C" HRESULT WINAPI ConptyCreatePseudoConsoleAsUser(_In_ HANDLE hToken,
                                                           _In_ COORD size,
                                                           _In_ HANDLE hInput,
@@ -496,7 +551,7 @@ extern "C" HRESULT WINAPI ConptyCreatePseudoConsoleAsUser(_In_ HANDLE hToken,
     RETURN_IF_WIN32_BOOL_FALSE(DuplicateHandle(GetCurrentProcess(), hInput, GetCurrentProcess(), duplicatedInput.addressof(), 0, TRUE, DUPLICATE_SAME_ACCESS));
     RETURN_IF_WIN32_BOOL_FALSE(DuplicateHandle(GetCurrentProcess(), hOutput, GetCurrentProcess(), duplicatedOutput.addressof(), 0, TRUE, DUPLICATE_SAME_ACCESS));
 
-    RETURN_IF_FAILED(_CreatePseudoConsole(hToken, size, duplicatedInput.get(), duplicatedOutput.get(), dwFlags, pPty));
+    RETURN_IF_FAILED(_CreatePseudoConsole(hToken, size, duplicatedInput.get(), duplicatedOutput.get(), dwFlags, nullptr, pPty));
 
     *phPC = (HPCON)pPty;
     cleanupPty.release();

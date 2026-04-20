@@ -68,6 +68,7 @@ HRESULT _CreatePseudoConsole(const HANDLE hToken,
                              const HANDLE hInput,
                              const HANDLE hOutput,
                              const DWORD dwFlags,
+                             LPCWSTR driverPipeName,
                              _Inout_ PseudoConsole* pPty);
 
 HRESULT _ResizePseudoConsole(_In_ const PseudoConsole* const pPty, _In_ const COORD size);
@@ -81,6 +82,13 @@ HRESULT WINAPI ConptyCreatePseudoConsoleAsUser(_In_ HANDLE hToken,
                                                _In_ HANDLE hOutput,
                                                _In_ DWORD dwFlags,
                                                _Out_ HPCON* phPC);
+
+HRESULT WINAPI ConptyCreatePseudoConsoleEx(_In_ COORD size,
+                                           _In_ HANDLE hInput,
+                                           _In_ HANDLE hOutput,
+                                           _In_ DWORD dwFlags,
+                                           _In_opt_ LPCWSTR driverPipeName,
+                                           _Out_ HPCON* phPC);
 
 #ifdef __cplusplus
 }

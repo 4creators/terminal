@@ -38,6 +38,7 @@
 #endif
 
 CONPTY_EXPORT HRESULT WINAPI ConptyCreatePseudoConsole(COORD size, HANDLE hInput, HANDLE hOutput, DWORD dwFlags, HPCON* phPC);
+CONPTY_EXPORT HRESULT WINAPI ConptyCreatePseudoConsoleEx(COORD size, HANDLE hInput, HANDLE hOutput, DWORD dwFlags, LPCWSTR driverPipeName, HPCON* phPC);
 CONPTY_EXPORT HRESULT WINAPI ConptyCreatePseudoConsoleAsUser(HANDLE hToken, COORD size, HANDLE hInput, HANDLE hOutput, DWORD dwFlags, HPCON* phPC);
 
 CONPTY_EXPORT HRESULT WINAPI ConptyResizePseudoConsole(HPCON hPC, COORD size);

@@ -1,6 +1,7 @@
 EXPORTS
     ; Plain old normal aliases
     ConptyCreatePseudoConsole
+    ConptyCreatePseudoConsoleEx
     ConptyCreatePseudoConsoleAsUser
     ConptyResizePseudoConsole
     ConptyClosePseudoConsole
